@@ -38,20 +38,30 @@ body {
 }
 
 body {
-  overflow: hidden;
-  background: var(--bg);
+  overflow-x: hidden;
+  background:
+    radial-gradient(circle at 20% 10%, rgba(32, 125, 203, 0.14), transparent 34rem),
+    radial-gradient(circle at 85% 30%, rgba(67, 87, 183, 0.12), transparent 36rem),
+    var(--bg);
   color: var(--text);
   font-family: Arial, "Noto Sans KR", sans-serif;
 }
 
 button,
-input {
+input,
+textarea,
+select {
   font: inherit;
 }
 
 button,
 a {
   -webkit-tap-highlight-color: transparent;
+}
+
+select option {
+  background: #07111e;
+  color: #f7fbff;
 }
 
 .glass {
@@ -133,6 +143,5 @@ a {
 }
 
 @media (max-width: 767px) {
-  body { overflow: hidden; }
   .demo-globe { width: 116vw; top: 48%; }
 }

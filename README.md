@@ -1,230 +1,236 @@
-# World Travel Explorer
+# Journey Vault
 
-Google Maps Platform의 **3D Maps**, Places API (New), Geocoding API와 Wikipedia를 결합한 반응형 여행 탐색 홈페이지입니다.
+Google 3D 지구본으로 여행지를 탐색하고, 개인 여행계획을 작성해 비밀번호로 보호하여 저장하는 Next.js 여행 플래너입니다.
 
 ## 주요 기능
 
-- 전체 화면 HYBRID 모드 3D 지구본
-- 마우스·손가락 회전, 휠·핀치 확대/축소
-- 초기 자동 회전 및 사용자 조작 시 중지
-- 장소 자동완성 최대 5개
-- 지구본 클릭 좌표 역지오코딩
-- 검색 위치로 자연스러운 카메라 비행
-- 주변 관광지·박물관·공원·식당·카페·호텔 검색
-- 3D 마커 및 상세 정보
-- Google Places 사진과 사진 제공자 표기
-- 한국어 Wikipedia 우선, 없으면 영어 Wikipedia
-- 최근 검색 10개 localStorage 저장 및 삭제
-- PC 우측 패널 / 모바일 바텀시트
-- 다크·라이트 모드
+### 여행지 탐색
+- Google Maps JavaScript API 3D Maps 기반 지구본
+- 장소 검색·자동완성·역지오코딩
+- 주변 관광지, 식당, 카페, 호텔 검색
+- Wikipedia 지역 소개
+- PC·모바일 반응형 화면
+
+### 개인 여행계획
+- 여행 제목, 여행지, 기간, 인원, 예산, 여행 성향 입력
+- 여행 날짜에 맞춘 일자별 일정 자동 생성
+- 관광·식사·이동·숙소 등 세부 일정 작성
+- 게시판 형태로 최신 일정부터 순서대로 표시
+- 각 일정은 개별 열람 비밀번호로 보호
+- 비밀번호는 원문이 아닌 PBKDF2-SHA-256 해시로 저장
+
+### 관리자
+- 환경변수 기반 관리자 로그인
+- HTTP 전용 서명 쿠키로 관리자 세션 유지
+- 모든 일정 전체 열람
+- 일정 영구 삭제
 
 ---
 
-## 1. 프로젝트 폴더 구조
+## 프로젝트 구조
 
 ```text
-world-travel-explorer
-├─ app
-│  ├─ api
-│  │  ├─ autocomplete/route.ts
-│  │  ├─ country/route.ts
-│  │  ├─ nearby/route.ts
-│  │  ├─ photo/route.ts
-│  │  ├─ place/route.ts
-│  │  ├─ reverse-geocode/route.ts
-│  │  ├─ search/route.ts
-│  │  └─ wiki/route.ts
-│  ├─ globals.css
-│  ├─ layout.tsx
-│  └─ page.tsx
-├─ components
-│  ├─ ErrorMessage.tsx
-│  ├─ FallbackGlobe.tsx
-│  ├─ GlobeMap.tsx
-│  ├─ LoadingOverlay.tsx
-│  ├─ LocationPanel.tsx
-│  ├─ MobileBottomSheet.tsx
-│  ├─ NearbyMarkers.tsx
-│  ├─ PhotoGallery.tsx
-│  ├─ PlaceCard.tsx
-│  ├─ PlaceDetail.tsx
-│  ├─ RecentSearches.tsx
-│  ├─ SearchBar.tsx
-│  └─ SearchSuggestions.tsx
-├─ lib
-│  ├─ server
-│  │  ├─ google.ts
-│  │  └─ normalize.ts
-│  ├─ clientApi.ts
-│  ├─ format.ts
-│  └─ googleMapsLoader.ts
-├─ types/travel.ts
-├─ .env.example
-├─ .gitignore
-├─ eslint.config.mjs
-├─ next.config.ts
-├─ package.json
-├─ postcss.config.mjs
-├─ README.md
-└─ tsconfig.json
+app
+├─ admin/page.tsx
+├─ planner/page.tsx
+├─ plans
+│  ├─ page.tsx
+│  └─ [id]/page.tsx
+├─ api
+│  ├─ plans
+│  │  ├─ route.ts
+│  │  └─ [id]/unlock/route.ts
+│  └─ admin
+│     ├─ login/route.ts
+│     ├─ logout/route.ts
+│     └─ plans
+│        ├─ route.ts
+│        └─ [id]/route.ts
+├─ page.tsx
+├─ layout.tsx
+└─ globals.css
+
+components
+├─ AppHeader.tsx
+├─ PlanDetailView.tsx
+└─ 기존 Google 지도 컴포넌트
+
+lib/server
+├─ adminAuth.ts
+├─ password.ts
+├─ planStore.ts
+└─ 기존 Google API 모듈
+
+types
+├─ plan.ts
+└─ travel.ts
 ```
 
 ---
 
-## 2. Google Cloud에서 활성화할 API
+## 1. 환경변수
 
-프로젝트에서 다음 세 API를 활성화합니다.
+프로젝트 최상위의 `.env.local`에 입력합니다.
 
-1. **Maps JavaScript API** — 브라우저의 3D 지구본
-2. **Places API (New)** — 자동완성, 장소 상세, 주변 검색, 사진
-3. **Geocoding API** — 지구본 클릭 위치의 역지오코딩
+```env
+# Google 3D 지도
+NEXT_PUBLIC_GOOGLE_MAPS_API_KEY=브라우저용_지도_키
+GOOGLE_MAPS_SERVER_API_KEY=서버용_지도_키
+# GOOGLE_PLACES_API_KEY=기존_서버용_키
 
-결제 계정도 해당 Google Cloud 프로젝트에 연결해야 합니다.
+# Supabase
+SUPABASE_URL=https://YOUR_PROJECT.supabase.co
+SUPABASE_SERVICE_ROLE_KEY=서비스_역할_키
+
+# 관리자
+ADMIN_PASSWORD=관리자_비밀번호
+ADMIN_SESSION_SECRET=32자_이상의_무작위_문자열
+```
+
+`SUPABASE_SERVICE_ROLE_KEY`, `ADMIN_PASSWORD`, `ADMIN_SESSION_SECRET`에는 절대로 `NEXT_PUBLIC_` 접두사를 붙이지 마세요.
+
+관리자 세션 비밀키 생성 예시:
+
+```powershell
+node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+```
 
 ---
 
-## 3. API 키를 두 개로 분리
+## 2. Supabase 데이터베이스 만들기
 
-### A. 브라우저 지도용 키
+1. Supabase에서 새 프로젝트를 만듭니다.
+2. 왼쪽 메뉴에서 `SQL Editor`를 엽니다.
+3. 아래 SQL을 실행합니다.
 
-- API 제한: `Maps JavaScript API`
-- 애플리케이션 제한: `웹사이트`
-- 허용 리퍼러 예시:
+```sql
+create table if not exists public.travel_plans (
+  id uuid primary key,
+  title text not null,
+  destination text not null,
+  start_date date not null,
+  end_date date not null,
+  travelers integer not null check (travelers between 1 and 100),
+  budget bigint,
+  travel_style text,
+  summary text,
+  itinerary jsonb not null default '[]'::jsonb,
+  password_hash text not null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create index if not exists travel_plans_created_at_idx
+  on public.travel_plans (created_at desc);
+
+alter table public.travel_plans enable row level security;
+```
+
+공개 사용자를 위한 RLS 정책은 만들지 않습니다. 브라우저에서는 Supabase에 직접 접속하지 않고, Next.js 서버 Route Handler만 서비스 역할 키를 사용합니다.
+
+Supabase에서 복사할 값:
+
+```text
+Project Settings
+→ API
+→ Project URL                 → SUPABASE_URL
+→ Service role secret         → SUPABASE_SERVICE_ROLE_KEY
+```
+
+서비스 역할 키는 화면이나 GitHub에 공개하면 안 됩니다.
+
+---
+
+## 3. Google Cloud API
+
+활성화할 API:
+
+```text
+Maps JavaScript API
+Places API (New)
+Geocoding API
+```
+
+브라우저용 키는 웹사이트 HTTP 리퍼러 제한을 적용합니다.
 
 ```text
 http://localhost:3000/*
-https://내-프로젝트.vercel.app/*
-https://내도메인.com/*
+https://repository-name-journey-vault.vercel.app/*
 ```
 
-### B. 서버용 비밀 키
-
-- API 제한: `Places API (New)`, `Geocoding API`
-- 이 키는 `.env.local`과 Vercel 환경변수에만 저장합니다.
-- `NEXT_PUBLIC_`을 붙이면 안 됩니다.
+서버용 키는 Places API (New)와 Geocoding API만 허용합니다.
 
 ---
 
-## 4. 환경변수 만들기
-
-프로젝트 최상위에 `.env.local`을 만듭니다.
-
-```env
-NEXT_PUBLIC_GOOGLE_MAPS_API_KEY=브라우저_지도용_키
-GOOGLE_MAPS_SERVER_API_KEY=서버용_비밀_키
-```
-
-기존에 아래 이름으로 만든 키도 서버 코드가 읽습니다.
-
-```env
-GOOGLE_PLACES_API_KEY=기존_서버용_키
-```
-
-API 키가 보이는 화면은 사진으로 공유하지 마세요. 노출된 키는 Google Cloud에서 즉시 삭제하고 새로 발급합니다.
-
----
-
-## 5. 설치와 실행
-
-PowerShell 보안 정책 때문에 `npm` 실행이 차단되는 컴퓨터에서는 `.cmd`를 붙입니다.
+## 4. 로컬 설치 및 실행
 
 ```powershell
-cd C:\Users\USER\world-travel-explorer
+cd C:\Users\USER\journey-vault
 npm.cmd install
 npm.cmd run dev
 ```
 
-브라우저에서 엽니다.
+브라우저:
 
 ```text
 http://localhost:3000
 ```
 
-일반 명령 프롬프트에서는 다음도 가능합니다.
-
-```cmd
-npm install
-npm run dev
-```
-
----
-
-## 6. 기존 프로젝트에 적용하는 방법
-
-1. 실행 중인 서버를 `Ctrl + C`로 중지합니다.
-2. 기존 폴더를 별도 위치에 백업합니다.
-3. 이 패키지의 `app`, `components`, `lib`, `types` 폴더와 설정 파일을 기존 프로젝트로 복사합니다.
-4. 기존 `.env.local`은 삭제하지 말고 필요한 두 환경변수를 추가합니다.
-5. 아래 명령을 실행합니다.
+프로덕션 빌드 확인:
 
 ```powershell
-npm.cmd install
-npm.cmd run dev
+npm.cmd run build
 ```
 
 ---
 
-## 7. 기능 확인 순서
+## 5. Vercel 환경변수
 
-1. 초기화면에 3D 지구본이 표시되는지 확인
-2. 파리, 도쿄 등 인기 여행지 버튼 클릭
-3. 검색창에 두 글자 이상 입력해 추천 목록 확인
-4. 추천 결과를 선택했을 때 카메라가 이동하는지 확인
-5. 지구본의 육지 위치를 클릭해 지역 패널이 열리는지 확인
-6. 관광지·카페·식당·호텔 필터 변경
-7. 장소 카드를 눌러 3D 마커 이동 및 상세 패널 확인
-8. 모바일 개발자 도구에서 바텀시트 확인
+Vercel 프로젝트에서 다음 경로로 들어갑니다.
 
----
-
-## 8. 자주 발생하는 오류
-
-### 3D 지구본 대신 안내용 지구가 보임
-
-`NEXT_PUBLIC_GOOGLE_MAPS_API_KEY`가 없거나 Maps JavaScript API가 비활성화된 상태입니다. 키를 넣은 뒤 서버를 다시 시작하세요.
-
-```powershell
-Ctrl + C
-npm.cmd run dev
+```text
+Settings
+→ Environment Variables
 ```
 
-### 자동완성 또는 주변 검색 오류
-
-- Places API (New) 활성화 여부
-- 서버 키의 API 제한
-- 결제 계정 연결 여부
-- `.env.local`이 `package.json`과 같은 최상위에 있는지 확인
-
-### 지구본 클릭 위치를 찾지 못함
-
-바다나 매우 넓은 지역은 역지오코딩 결과가 없을 수 있습니다. 도시 또는 육지의 지명 근처를 클릭하세요.
-
-### 사진이 보이지 않음
-
-Place Photo 이름은 만료될 수 있으므로 사진 URL을 데이터베이스에 장기 저장하지 마세요. 이 프로젝트는 매 검색 응답에서 받은 최신 사진 이름을 사용합니다.
-
----
-
-## 9. Vercel 배포
-
-1. GitHub 저장소에 프로젝트를 업로드합니다. `.env.local`은 업로드하지 않습니다.
-2. Vercel에서 `Add New Project` → GitHub 저장소 선택
-3. Vercel `Settings` → `Environment Variables`에 아래 값을 추가
+아래 값을 `Production`, `Preview`, `Development`에 등록합니다.
 
 ```text
 NEXT_PUBLIC_GOOGLE_MAPS_API_KEY
 GOOGLE_MAPS_SERVER_API_KEY
+GOOGLE_PLACES_API_KEY        선택
+SUPABASE_URL
+SUPABASE_SERVICE_ROLE_KEY
+ADMIN_PASSWORD
+ADMIN_SESSION_SECRET
 ```
 
-4. 배포 후 브라우저 키의 HTTP 리퍼러에 Vercel 주소를 추가합니다.
-5. 다시 배포합니다.
+저장 후 반드시 다시 배포합니다.
+
+```text
+Deployments
+→ 최신 배포의 ···
+→ Redeploy
+```
 
 ---
 
-## 10. 비용과 보안
+## 6. 사용 순서
 
-- Google API는 요청한 필드에 따라 과금될 수 있습니다.
-- Route Handler는 필요한 FieldMask만 요청합니다.
-- 자동완성은 360ms 디바운스와 최소 2글자 조건을 사용합니다.
-- 요청 중복은 자동완성 디바운스로 줄이며, Wikipedia와 국가 기본정보만 서버 메모리 TTL 캐시를 사용합니다. Google Places 사진 이름과 장소 응답은 정책과 만료 가능성을 고려해 영구 저장하지 않습니다.
-- 운영 서비스에서는 Google Cloud의 할당량, 예산 알림, API별 사용량을 설정하세요.
+1. `/`에서 지구본으로 여행지를 탐색합니다.
+2. `계획 만들기`에서 기본정보와 일자별 일정을 작성합니다.
+3. 열람 비밀번호를 입력해 저장합니다.
+4. `저장된 일정` 게시판에서 여행계획을 선택합니다.
+5. 설정한 비밀번호를 입력하면 전체 일정이 표시됩니다.
+6. `/admin`에서 관리자 비밀번호로 로그인하면 전체 자료를 열람하고 삭제할 수 있습니다.
+
+---
+
+## 보안 주의사항
+
+- 여행 일정의 개별 비밀번호는 복구할 수 없습니다.
+- 관리자 비밀번호와 Supabase 서비스 역할 키를 GitHub에 올리지 마세요.
+- `.env.local`은 `.gitignore`에 의해 제외되어야 합니다.
+- 공개 게시판에는 여행 제목, 여행지, 여행 기간, 인원과 여행 성향만 노출됩니다.
+- 항공권 번호, 여권번호, 주민등록번호, 신용카드 정보 등 민감한 개인정보는 일정에 저장하지 않는 것이 안전합니다.
+- 운영 단계에서는 Vercel Firewall 또는 별도 속도 제한 서비스를 추가해 반복적인 비밀번호 시도를 제한하는 것을 권장합니다.
