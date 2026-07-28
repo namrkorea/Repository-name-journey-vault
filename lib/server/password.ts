@@ -1,45 +1,70 @@
-import { timingSafeEqual } from "node:crypto";
+import {
+  pbkdf2,
+  randomBytes,
+  timingSafeEqual,
+} from "node:crypto";
+import { promisify } from "node:util";
 
 const ITERATIONS = 120_000;
 const KEY_LENGTH = 32;
-const DIGEST = "SHA-256";
+const DIGEST_LABEL = "SHA-256";
+const NODE_DIGEST = "sha256";
+const pbkdf2Async = promisify(pbkdf2);
 
-function toBase64(bytes: Uint8Array): string {
-  return Buffer.from(bytes).toString("base64url");
+function toBase64(value: Uint8Array): string {
+  return Buffer.from(value).toString("base64url");
 }
 
-function fromBase64(value: string): Uint8Array {
-  return new Uint8Array(Buffer.from(value, "base64url"));
+function fromBase64(value: string): Buffer {
+  return Buffer.from(value, "base64url");
 }
 
-async function derive(password: string, salt: Uint8Array, iterations: number): Promise<Uint8Array> {
-  const keyMaterial = await crypto.subtle.importKey(
-    "raw",
-    new TextEncoder().encode(password),
-    "PBKDF2",
-    false,
-    ["deriveBits"],
+async function derive(
+  password: string,
+  salt: Uint8Array,
+  iterations: number,
+): Promise<Buffer> {
+  return pbkdf2Async(
+    password,
+    Buffer.from(salt),
+    iterations,
+    KEY_LENGTH,
+    NODE_DIGEST,
   );
-  const bits = await crypto.subtle.deriveBits(
-    { name: "PBKDF2", salt, iterations, hash: DIGEST },
-    keyMaterial,
-    KEY_LENGTH * 8,
-  );
-  return new Uint8Array(bits);
 }
 
 export async function hashPlanPassword(password: string): Promise<string> {
-  const salt = crypto.getRandomValues(new Uint8Array(16));
+  const salt = randomBytes(16);
   const hash = await derive(password, salt, ITERATIONS);
-  return `pbkdf2_${DIGEST}.${ITERATIONS}.${toBase64(salt)}.${toBase64(hash)}`;
+
+  return `pbkdf2_${DIGEST_LABEL}.${ITERATIONS}.${toBase64(salt)}.${toBase64(hash)}`;
 }
 
-export async function verifyPlanPassword(password: string, stored: string): Promise<boolean> {
+export async function verifyPlanPassword(
+  password: string,
+  stored: string,
+): Promise<boolean> {
   const [scheme, count, saltText, hashText] = stored.split(".");
-  if (scheme !== `pbkdf2_${DIGEST}` || !count || !saltText || !hashText) return false;
+  const iterations = Number(count);
+
+  if (
+    scheme !== `pbkdf2_${DIGEST_LABEL}` ||
+    !Number.isInteger(iterations) ||
+    iterations < 1 ||
+    !saltText ||
+    !hashText
+  ) {
+    return false;
+  }
+
   const expected = fromBase64(hashText);
-  const actual = await derive(password, fromBase64(saltText), Number(count));
-  return expected.length === actual.length && timingSafeEqual(Buffer.from(expected), Buffer.from(actual));
+  const salt = fromBase64(saltText);
+  const actual = await derive(password, salt, iterations);
+
+  return (
+    expected.length === actual.length &&
+    timingSafeEqual(expected, actual)
+  );
 }
 
 export function validatePlanPassword(password: string): string | null {
