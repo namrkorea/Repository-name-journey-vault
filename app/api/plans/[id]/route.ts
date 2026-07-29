@@ -1,3 +1,7 @@
+import {
+  normalizeRecipientEmail,
+  sendTravelPlanEmail,
+} from "@/lib/server/planEmail";
 import { validateTravelPlanInput } from "@/lib/server/planInput";
 import { getStoredPlan, updateTravelPlan } from "@/lib/server/planStore";
 import { verifyPlanPassword } from "@/lib/server/password";
@@ -15,7 +19,11 @@ export async function PUT(
 ) {
   try {
     const { id } = await context.params;
-    const input = validateTravelPlanInput(await request.json());
+    const body = await request.json();
+    const recipientEmail = normalizeRecipientEmail(
+      (body as Record<string, unknown>).recipientEmail,
+    );
+    const input = validateTravelPlanInput(body);
     const stored = await getStoredPlan(id);
 
     if (!stored) {
@@ -37,7 +45,39 @@ export async function PUT(
     const { password: _password, ...planInput } = input;
     const plan = await updateTravelPlan(id, planInput);
 
-    return Response.json({ plan });
+    let email: {
+      requested: boolean;
+      sent: boolean;
+      id?: string;
+      error?: string;
+    } = {
+      requested: Boolean(recipientEmail),
+      sent: false,
+    };
+
+    if (recipientEmail) {
+      try {
+        const emailId = await sendTravelPlanEmail({
+          to: recipientEmail,
+          planId: id,
+          planUrl: new URL(`/plans/${encodeURIComponent(id)}`, request.url)
+            .toString(),
+          plan: planInput,
+        });
+        email = { requested: true, sent: true, id: emailId };
+      } catch (caught) {
+        email = {
+          requested: true,
+          sent: false,
+          error:
+            caught instanceof Error
+              ? caught.message
+              : "메일을 전송하지 못했습니다.",
+        };
+      }
+    }
+
+    return Response.json({ plan, email });
   } catch (error) {
     return Response.json(
       {
