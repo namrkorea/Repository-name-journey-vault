@@ -1,3 +1,7 @@
+import {
+  normalizeRecipientEmail,
+  sendTravelPlanEmail,
+} from "@/lib/server/planEmail";
 import { validateTravelPlanInput } from "@/lib/server/planInput";
 import { createTravelPlan, listPublicPlans } from "@/lib/server/planStore";
 import { hashPlanPassword } from "@/lib/server/password";
@@ -27,12 +31,48 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
-    const input = validateTravelPlanInput(await request.json());
+    const body = await request.json();
+    const recipientEmail = normalizeRecipientEmail(
+      (body as Record<string, unknown>).recipientEmail,
+    );
+    const input = validateTravelPlanInput(body);
     const passwordHash = await hashPlanPassword(input.password);
     const { password: _password, ...planInput } = input;
     const plan = await createTravelPlan(planInput, passwordHash);
 
-    return Response.json({ plan }, { status: 201 });
+    let email: {
+      requested: boolean;
+      sent: boolean;
+      id?: string;
+      error?: string;
+    } = {
+      requested: Boolean(recipientEmail),
+      sent: false,
+    };
+
+    if (recipientEmail) {
+      try {
+        const emailId = await sendTravelPlanEmail({
+          to: recipientEmail,
+          planId: plan.id,
+          planUrl: new URL(`/plans/${encodeURIComponent(plan.id)}`, request.url)
+            .toString(),
+          plan: planInput,
+        });
+        email = { requested: true, sent: true, id: emailId };
+      } catch (caught) {
+        email = {
+          requested: true,
+          sent: false,
+          error:
+            caught instanceof Error
+              ? caught.message
+              : "메일을 전송하지 못했습니다.",
+        };
+      }
+    }
+
+    return Response.json({ plan, email }, { status: 201 });
   } catch (error) {
     return Response.json(
       {
