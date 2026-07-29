@@ -2,6 +2,7 @@
 
 import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
+import { LoaderCircle, RefreshCw, Sparkles, WandSparkles } from "lucide-react";
 import AppHeader from "@/components/AppHeader";
 import type {
   ItineraryCategory,
@@ -18,6 +19,14 @@ const categories: ItineraryCategory[] = [
   "휴식",
   "기타",
 ];
+
+type AiMode = "generate" | "revise";
+
+type AiPlan = {
+  title: string;
+  summary: string;
+  days: ItineraryDay[];
+};
 
 function newItem(): ItineraryItem {
   return {
@@ -67,6 +76,11 @@ export default function PlannerPage() {
     passwordConfirm: "",
   });
   const [days, setDays] = useState<ItineraryDay[]>([]);
+  const [aiRequirements, setAiRequirements] = useState("");
+  const [aiInstruction, setAiInstruction] = useState("");
+  const [aiLoading, setAiLoading] = useState<AiMode | null>(null);
+  const [aiError, setAiError] = useState("");
+  const [aiNotice, setAiNotice] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
 
@@ -77,7 +91,9 @@ export default function PlannerPage() {
     setError("");
     const nextDays = dateRange(form.startDate, form.endDate);
     if (nextDays.length === 0) {
-      setError("출발일과 도착일을 확인해 주세요. 일정은 최대 31일까지 만들 수 있습니다.");
+      setError(
+        "출발일과 도착일을 확인해 주세요. 일정은 최대 31일까지 만들 수 있습니다.",
+      );
       return;
     }
     if (
@@ -144,6 +160,94 @@ export default function PlannerPage() {
     );
   }
 
+  async function runAi(mode: AiMode) {
+    setAiError("");
+    setAiNotice("");
+
+    if (!form.destination || !form.startDate || !form.endDate) {
+      setAiError("여행지, 출발일, 도착일을 먼저 입력해 주세요.");
+      return;
+    }
+
+    if (mode === "revise" && days.length === 0) {
+      setAiError("수정할 일정이 없습니다. 먼저 AI 초안을 만들어 주세요.");
+      return;
+    }
+
+    if (mode === "revise" && !aiInstruction.trim()) {
+      setAiError("AI에게 요청할 수정 내용을 입력해 주세요.");
+      return;
+    }
+
+    if (
+      mode === "generate" &&
+      days.length > 0 &&
+      !window.confirm("현재 작성한 일정을 AI가 만든 새 일정으로 교체할까요?")
+    ) {
+      return;
+    }
+
+    try {
+      setAiLoading(mode);
+
+      const response = await fetch("/api/ai/plan", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          mode,
+          destination: form.destination,
+          startDate: form.startDate,
+          endDate: form.endDate,
+          travelers: Number(form.travelers),
+          budget: form.budget ? Number(form.budget) : null,
+          travelStyle: form.travelStyle,
+          requirements: aiRequirements,
+          existingNotes: form.summary,
+          instruction: mode === "revise" ? aiInstruction : "",
+          currentPlan:
+            mode === "revise"
+              ? {
+                  title: form.title,
+                  summary: form.summary,
+                  days,
+                }
+              : null,
+        }),
+      });
+
+      const data = (await response.json()) as {
+        plan?: AiPlan;
+        error?: string;
+      };
+
+      if (!response.ok || !data.plan) {
+        throw new Error(data.error ?? "AI 여행계획을 만들지 못했습니다.");
+      }
+
+      const generatedPlan = data.plan;
+      setForm((current) => ({
+        ...current,
+        title: generatedPlan.title || current.title,
+        summary: generatedPlan.summary || current.summary,
+      }));
+      setDays(generatedPlan.days);
+      setAiInstruction("");
+      setAiNotice(
+        mode === "generate"
+          ? "AI 여행 초안이 만들어졌습니다. 아래에서 직접 수정한 뒤 저장하세요."
+          : "요청한 내용으로 일정이 수정되었습니다. 변경 내용을 확인하세요.",
+      );
+    } catch (caught) {
+      setAiError(
+        caught instanceof Error
+          ? caught.message
+          : "AI 여행계획을 만들지 못했습니다.",
+      );
+    } finally {
+      setAiLoading(null);
+    }
+  }
+
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError("");
@@ -198,14 +302,14 @@ export default function PlannerPage() {
       <div className="mx-auto max-w-6xl px-4 py-8 md:px-8 md:py-12">
         <div className="mb-8 max-w-3xl">
           <p className="text-xs font-bold tracking-[0.25em] text-sky-300">
-            CREATE A PRIVATE JOURNEY
+            AI PRIVATE JOURNEY DESIGNER
           </p>
           <h1 className="mt-2 text-3xl font-black md:text-5xl">
-            새로운 여행계획 만들기
+            AI 여행계획 만들기
           </h1>
           <p className="mt-4 leading-7 text-white/55">
-            기본정보를 입력하고 일자별 일정을 만든 뒤, 열람 비밀번호로
-            보호하여 저장합니다.
+            기본정보와 원하는 조건을 입력하면 AI가 일자별 여행 초안을 만들고,
+            추가 요청에 따라 다시 수정합니다.
           </p>
         </div>
 
@@ -217,21 +321,20 @@ export default function PlannerPage() {
               </span>
               <div>
                 <h2 className="text-xl font-bold">여행 기본정보</h2>
-                <p className="text-xs text-white/45">제목, 여행지, 기간과 예산</p>
+                <p className="text-xs text-white/45">여행지, 기간, 인원과 예산</p>
               </div>
             </div>
 
             <div className="grid gap-4 md:grid-cols-2">
               <label className="space-y-2 md:col-span-2">
-                <span className="text-sm text-white/70">여행 제목 *</span>
+                <span className="text-sm text-white/70">여행 제목</span>
                 <input
-                  required
                   value={form.title}
                   onChange={(event) =>
                     setForm({ ...form, title: event.target.value })
                   }
                   className={inputClass}
-                  placeholder="예: 프랑스·스위스 10일 부부 여행"
+                  placeholder="비워두면 AI가 제목을 제안합니다."
                 />
               </label>
               <label className="space-y-2 md:col-span-2">
@@ -318,22 +421,122 @@ export default function PlannerPage() {
                     setForm({ ...form, summary: event.target.value })
                   }
                   className={inputClass}
-                  placeholder="항공편, 숙소, 이동 원칙, 꼭 지킬 조건 등을 기록하세요."
+                  placeholder="이미 예약한 항공편, 숙소, 이동 원칙 등을 기록하세요."
                 />
               </label>
             </div>
+          </section>
+
+          <section className="overflow-hidden rounded-3xl border border-sky-300/20 bg-gradient-to-br from-sky-400/[0.1] via-blue-500/[0.055] to-violet-500/[0.08] p-5 md:p-7">
+            <div className="mb-6 flex items-center gap-3">
+              <span className="grid h-10 w-10 place-items-center rounded-2xl bg-sky-300 text-slate-950 shadow-lg shadow-sky-950/40">
+                <Sparkles size={20} />
+              </span>
+              <div>
+                <p className="text-[10px] font-bold tracking-[0.2em] text-sky-300">
+                  AI TRAVEL DESIGNER
+                </p>
+                <h2 className="text-xl font-bold">AI 여행 설계</h2>
+              </div>
+            </div>
+
+            <label className="block space-y-2">
+              <span className="text-sm text-white/75">원하는 여행 조건</span>
+              <textarea
+                rows={6}
+                value={aiRequirements}
+                onChange={(event) => setAiRequirements(event.target.value)}
+                className={inputClass}
+                placeholder={`예:\n50대 부부 여행\n하루 도보 이동은 무리하지 않게\n오전 9시 이후 일정 시작\n현지 맛집과 조용한 카페 포함\n대중교통 중심, 숙소 이동 최소화\n쇼핑은 마지막 날 배치`}
+              />
+            </label>
+
+            <div className="mt-4 flex flex-wrap items-center gap-3">
+              <button
+                type="button"
+                disabled={aiLoading !== null}
+                onClick={() => runAi("generate")}
+                className="inline-flex items-center gap-2 rounded-2xl bg-gradient-to-r from-sky-400 to-blue-500 px-5 py-3 text-sm font-black text-slate-950 shadow-lg shadow-sky-950/30 transition hover:brightness-110 disabled:cursor-wait disabled:opacity-55"
+              >
+                {aiLoading === "generate" ? (
+                  <LoaderCircle size={18} className="animate-spin" />
+                ) : (
+                  <WandSparkles size={18} />
+                )}
+                {aiLoading === "generate"
+                  ? "AI가 여행 초안을 만드는 중..."
+                  : "AI로 여행 초안 만들기"}
+              </button>
+              <p className="text-xs leading-5 text-white/45">
+                생성된 일정은 아래에서 시간·장소·메모를 직접 고칠 수 있습니다.
+              </p>
+            </div>
+
+            {days.length > 0 && (
+              <div className="mt-7 border-t border-white/10 pt-6">
+                <label className="block space-y-2">
+                  <span className="text-sm text-white/75">
+                    AI에게 일정 수정 요청
+                  </span>
+                  <textarea
+                    rows={3}
+                    value={aiInstruction}
+                    onChange={(event) => setAiInstruction(event.target.value)}
+                    className={inputClass}
+                    placeholder="예: 2일차 오전을 여유롭게 바꾸고 미술관을 추가해 주세요."
+                  />
+                </label>
+                <button
+                  type="button"
+                  disabled={aiLoading !== null}
+                  onClick={() => runAi("revise")}
+                  className="mt-4 inline-flex items-center gap-2 rounded-2xl border border-sky-300/35 bg-sky-400/10 px-5 py-3 text-sm font-bold text-sky-100 transition hover:bg-sky-400/20 disabled:cursor-wait disabled:opacity-55"
+                >
+                  {aiLoading === "revise" ? (
+                    <LoaderCircle size={18} className="animate-spin" />
+                  ) : (
+                    <RefreshCw size={17} />
+                  )}
+                  {aiLoading === "revise"
+                    ? "AI가 일정을 수정하는 중..."
+                    : "AI로 일정 수정하기"}
+                </button>
+              </div>
+            )}
+
+            {aiError && (
+              <div
+                role="alert"
+                className="mt-5 rounded-2xl border border-red-300/20 bg-red-500/10 px-4 py-3 text-sm text-red-100"
+              >
+                {aiError}
+              </div>
+            )}
+            {aiNotice && (
+              <div
+                aria-live="polite"
+                className="mt-5 rounded-2xl border border-emerald-300/20 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-100"
+              >
+                {aiNotice}
+              </div>
+            )}
+
+            <p className="mt-5 text-xs leading-6 text-amber-100/55">
+              AI가 제안한 영업시간·교통·요금은 변경될 수 있으므로 예약 전에
+              공식 정보를 다시 확인하세요.
+            </p>
           </section>
 
           <section className="rounded-3xl border border-white/10 bg-white/[0.055] p-5 md:p-7">
             <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
               <div className="flex items-center gap-3">
                 <span className="grid h-9 w-9 place-items-center rounded-full bg-sky-400/20 text-sm font-black text-sky-200">
-                  2
+                  3
                 </span>
                 <div>
-                  <h2 className="text-xl font-bold">일자별 일정</h2>
+                  <h2 className="text-xl font-bold">일자별 일정 확인·편집</h2>
                   <p className="text-xs text-white/45">
-                    날짜별 관광·식사·이동·숙소 기록
+                    AI 일정 또는 직접 만든 일정을 자유롭게 수정
                   </p>
                 </div>
               </div>
@@ -342,13 +545,14 @@ export default function PlannerPage() {
                 onClick={generateDays}
                 className="rounded-full border border-sky-300/30 bg-sky-400/15 px-4 py-2 text-sm font-semibold text-sky-100 hover:bg-sky-400/25"
               >
-                여행 날짜로 일정 생성
+                빈 일정 직접 만들기
               </button>
             </div>
 
             {days.length === 0 ? (
               <div className="rounded-2xl border border-dashed border-white/15 p-8 text-center text-sm text-white/45">
-                출발일과 도착일을 입력한 뒤 일정 생성 버튼을 누르세요.
+                위에서 AI 초안을 만들거나, 출발일과 도착일을 입력한 뒤 빈 일정
+                직접 만들기를 누르세요.
               </div>
             ) : (
               <div className="space-y-5">
@@ -440,7 +644,7 @@ export default function PlannerPage() {
                               )
                             }
                             className={inputClass}
-                            placeholder="예약번호, 이동방법, 메모"
+                            placeholder="이동방법, 소요시간, 예약 메모"
                           />
                           <button
                             type="button"
@@ -470,7 +674,7 @@ export default function PlannerPage() {
           <section className="rounded-3xl border border-white/10 bg-white/[0.055] p-5 md:p-7">
             <div className="mb-6 flex items-center gap-3">
               <span className="grid h-9 w-9 place-items-center rounded-full bg-sky-400/20 text-sm font-black text-sky-200">
-                3
+                4
               </span>
               <div>
                 <h2 className="text-xl font-bold">비밀번호 보호 및 저장</h2>
@@ -482,9 +686,7 @@ export default function PlannerPage() {
 
             <div className="grid gap-4 md:grid-cols-2">
               <label className="space-y-2">
-                <span className="text-sm text-white/70">
-                  열람 비밀번호 *
-                </span>
+                <span className="text-sm text-white/70">열람 비밀번호 *</span>
                 <input
                   required
                   type="password"
@@ -499,9 +701,7 @@ export default function PlannerPage() {
                 />
               </label>
               <label className="space-y-2">
-                <span className="text-sm text-white/70">
-                  비밀번호 확인 *
-                </span>
+                <span className="text-sm text-white/70">비밀번호 확인 *</span>
                 <input
                   required
                   type="password"
@@ -536,7 +736,7 @@ export default function PlannerPage() {
 
             <button
               type="submit"
-              disabled={submitting}
+              disabled={submitting || days.length === 0}
               className="mt-6 w-full rounded-2xl bg-gradient-to-r from-sky-500 to-blue-600 px-5 py-4 font-bold text-white shadow-lg shadow-sky-950/40 transition hover:brightness-110 disabled:cursor-wait disabled:opacity-60"
             >
               {submitting ? "안전하게 저장하는 중..." : "여행계획 저장"}
