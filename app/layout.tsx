@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import type { ReactNode } from "react";
+import ScheduleMapLinks from "@/components/ScheduleMapLinks";
 import SideNav from "@/components/SideNav";
 import "./globals.css";
 
@@ -28,6 +29,7 @@ export default function RootLayout({
     <html lang="ko">
       <body>
         <SideNav />
+        <ScheduleMapLinks />
         {children}
       </body>
     </html>
