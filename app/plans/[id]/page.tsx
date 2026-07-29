@@ -58,7 +58,7 @@ export default function PlanViewPage() {
       EDIT_STORAGE_KEY,
       JSON.stringify({ plan, savedAt: Date.now() }),
     );
-    router.push(`/planner?edit=${encodeURIComponent(plan.id)}`);
+    router.push(`/plans/${encodeURIComponent(plan.id)}/edit`);
   }
 
   return (
