@@ -126,6 +126,37 @@ export async function createTravelPlan(
   return toPublicPlan(row);
 }
 
+export async function updateTravelPlan(
+  id: string,
+  input: Omit<TravelPlanCreateInput, "password">,
+): Promise<TravelPlanPublic> {
+  const [row] = await request<StoredRow[]>(
+    `travel_plans?id=eq.${encodeURIComponent(id)}`,
+    {
+      method: "PATCH",
+      headers: { Prefer: "return=representation" },
+      body: JSON.stringify({
+        title: input.title,
+        destination: input.destination,
+        start_date: input.startDate,
+        end_date: input.endDate,
+        travelers: input.travelers,
+        budget: input.budget,
+        travel_style: input.travelStyle,
+        summary: input.summary,
+        itinerary: input.days,
+        updated_at: new Date().toISOString(),
+      }),
+    },
+  );
+
+  if (!row) {
+    throw new Error("수정할 여행계획을 찾을 수 없습니다.");
+  }
+
+  return toPublicPlan(row);
+}
+
 export async function listAdminPlans(): Promise<TravelPlanFull[]> {
   const rows = await request<StoredRow[]>(
     "travel_plans?select=*&order=created_at.desc&limit=200",
