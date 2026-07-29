@@ -1,3 +1,4 @@
+import { MapPin } from "lucide-react";
 import type { TravelPlanFull } from "@/types/plan";
 
 function formatDate(value: string) {
@@ -12,6 +13,11 @@ function formatDate(value: string) {
 function formatBudget(value: number | null) {
   if (value === null) return "미입력";
   return `${new Intl.NumberFormat("ko-KR").format(value)}원`;
+}
+
+function googleMapsSearchUrl(place: string, destination: string) {
+  const query = [place, destination].filter(Boolean).join(" ");
+  return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(query)}`;
 }
 
 export default function PlanDetailView({
@@ -109,7 +115,7 @@ export default function PlanDetailView({
                   day.items.map((item) => (
                     <div
                       key={item.id}
-                      className="grid gap-2 rounded-2xl border border-white/10 bg-black/20 p-4 md:grid-cols-[70px_70px_1fr]"
+                      className="grid gap-2 rounded-2xl border border-white/10 bg-black/20 p-4 md:grid-cols-[70px_70px_1fr_auto] md:items-center"
                     >
                       <p className="font-mono text-sm text-sky-200">
                         {item.time || "--:--"}
@@ -127,6 +133,22 @@ export default function PlanDetailView({
                           </p>
                         )}
                       </div>
+                      {item.place ? (
+                        <a
+                          href={googleMapsSearchUrl(item.place, plan.destination)}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          aria-label={`${item.place} 지도 보기`}
+                          className="inline-flex min-h-11 items-center justify-center gap-1.5 rounded-xl border border-sky-300/25 bg-sky-400/10 px-3 text-xs font-bold text-sky-100 transition hover:border-sky-300/50 hover:bg-sky-400/20"
+                        >
+                          <MapPin size={15} />
+                          지도
+                        </a>
+                      ) : (
+                        <span className="inline-flex min-h-11 items-center justify-center rounded-xl border border-white/5 px-3 text-xs text-white/20">
+                          지도
+                        </span>
+                      )}
                     </div>
                   ))
                 )}
