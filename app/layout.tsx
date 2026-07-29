@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import type { ReactNode } from "react";
+import PlanEmailBridge from "@/components/PlanEmailBridge";
 import ScheduleMapLinks from "@/components/ScheduleMapLinks";
 import SideNav from "@/components/SideNav";
 import "./globals.css";
@@ -30,6 +31,7 @@ export default function RootLayout({
       <body>
         <SideNav />
         <ScheduleMapLinks />
+        <PlanEmailBridge />
         {children}
       </body>
     </html>
