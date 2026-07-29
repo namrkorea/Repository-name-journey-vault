@@ -5,6 +5,13 @@ import { createPortal } from "react-dom";
 import { usePathname } from "next/navigation";
 import { Mail } from "lucide-react";
 
+const EMAIL_FIELD_SELECTOR = "[data-plan-email-field]";
+const BRIDGE_OWNER_KEY = "__journeyVaultPlanEmailBridgeOwner";
+
+type BridgeWindow = Window & {
+  [BRIDGE_OWNER_KEY]?: string;
+};
+
 function isPlanSaveRequest(url: string, method: string): boolean {
   const pathname = new URL(url, window.location.origin).pathname;
   return (
@@ -17,6 +24,10 @@ export default function PlanEmailBridge() {
   const pathname = usePathname();
   const active =
     pathname === "/planner" || /^\/plans\/[^/]+\/edit$/.test(pathname);
+  const ownerIdRef = useRef(
+    `plan-email-bridge-${Math.random().toString(36).slice(2)}`,
+  );
+  const [ownsBridge, setOwnsBridge] = useState(false);
   const [email, setEmail] = useState("");
   const [mountNode, setMountNode] = useState<HTMLDivElement | null>(null);
   const emailRef = useRef("");
@@ -27,6 +38,42 @@ export default function PlanEmailBridge() {
 
   useEffect(() => {
     if (!active) {
+      setOwnsBridge(false);
+      return;
+    }
+
+    const bridgeWindow = window as BridgeWindow;
+    const ownerId = ownerIdRef.current;
+    let cancelled = false;
+    let retryTimer: ReturnType<typeof setTimeout> | undefined;
+
+    const claimBridge = () => {
+      if (cancelled) return;
+
+      const currentOwner = bridgeWindow[BRIDGE_OWNER_KEY];
+      if (!currentOwner || currentOwner === ownerId) {
+        bridgeWindow[BRIDGE_OWNER_KEY] = ownerId;
+        setOwnsBridge(true);
+        return;
+      }
+
+      retryTimer = setTimeout(claimBridge, 120);
+    };
+
+    claimBridge();
+
+    return () => {
+      cancelled = true;
+      if (retryTimer) clearTimeout(retryTimer);
+      if (bridgeWindow[BRIDGE_OWNER_KEY] === ownerId) {
+        delete bridgeWindow[BRIDGE_OWNER_KEY];
+      }
+      setOwnsBridge(false);
+    };
+  }, [active, pathname]);
+
+  useEffect(() => {
+    if (!active || !ownsBridge) {
       setMountNode(null);
       return;
     }
@@ -39,12 +86,14 @@ export default function PlanEmailBridge() {
       );
       if (!submitButton?.parentElement) return false;
 
-      const existing = document.querySelector<HTMLDivElement>(
-        "[data-plan-email-field]",
+      const existingFields = Array.from(
+        document.querySelectorAll<HTMLDivElement>(EMAIL_FIELD_SELECTOR),
       );
-      if (existing) {
-        container = existing;
-        setMountNode(existing);
+
+      if (existingFields.length > 0) {
+        container = existingFields[0];
+        existingFields.slice(1).forEach((field) => field.remove());
+        setMountNode(container);
         return true;
       }
 
@@ -72,10 +121,10 @@ export default function PlanEmailBridge() {
       container?.remove();
       setMountNode(null);
     };
-  }, [active, pathname]);
+  }, [active, ownsBridge, pathname]);
 
   useEffect(() => {
-    if (!active) return;
+    if (!active || !ownsBridge) return;
 
     const originalFetch = window.fetch.bind(window);
 
@@ -133,9 +182,9 @@ export default function PlanEmailBridge() {
     return () => {
       window.fetch = originalFetch;
     };
-  }, [active]);
+  }, [active, ownsBridge]);
 
-  if (!active || !mountNode) return null;
+  if (!active || !ownsBridge || !mountNode) return null;
 
   return createPortal(
     <div className="mt-6 rounded-2xl border border-sky-300/20 bg-sky-400/[0.07] p-4">
