@@ -64,6 +64,19 @@ select option {
   color: #f7fbff;
 }
 
+input[type="time"] {
+  min-width: 0;
+  padding-left: 0.55rem !important;
+  padding-right: 0.35rem !important;
+  font-size: 0.78rem !important;
+  font-variant-numeric: tabular-nums;
+}
+
+main[data-theme] nav,
+main[data-theme] > div[class*="top-0"] > div[class*="overflow-x-auto"] {
+  display: none !important;
+}
+
 .glass {
   border: 1px solid var(--line);
   background: var(--surface);
@@ -144,4 +157,8 @@ select option {
 
 @media (max-width: 767px) {
   .demo-globe { width: 116vw; top: 48%; }
+
+  body {
+    padding-bottom: 5.5rem;
+  }
 }
