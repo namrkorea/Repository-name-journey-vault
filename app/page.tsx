@@ -28,7 +28,7 @@ import type {
 } from "@/types/travel";
 
 const serviceLinks = [
-  { href: "/planner", label: "계획 만들기" },
+  { href: "/planner", label: "AI 계획 만들기" },
   { href: "/plans", label: "저장된 일정" },
   { href: "/admin", label: "관리자" },
 ];
@@ -238,13 +238,13 @@ export default function Home() {
         <div className="pointer-events-auto flex items-start justify-between gap-3">
           <div className="shrink-0">
             <p className="text-base font-black tracking-wide text-white md:text-xl">
-              JOURNEY VAULT
+              JOURNEY VAULT AI
             </p>
             <p className="text-[8px] font-semibold tracking-[0.34em] text-sky-300 md:text-[10px]">
-              PRIVATE TRAVEL PLANNER
+              PRIVATE TRAVEL DESIGNER
             </p>
             <div className="mt-2 flex items-center gap-2 text-[8px] font-medium tracking-[0.12em] text-white/55 md:text-[9px]">
-              <span>v1.0</span>
+              <span>v2.0</span>
               <span
                 className="h-2.5 w-px bg-white/25"
                 aria-hidden="true"
