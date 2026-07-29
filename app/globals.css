@@ -72,6 +72,43 @@ input[type="time"] {
   font-variant-numeric: tabular-nums;
 }
 
+.schedule-map-button {
+  display: inline-flex;
+  min-height: 46px;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  border: 1px solid rgba(125, 211, 252, 0.28);
+  border-radius: 0.75rem;
+  background: rgba(56, 189, 248, 0.1);
+  padding: 0 0.8rem;
+  color: rgba(224, 242, 254, 0.92);
+  font-size: 0.75rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 160ms ease, border-color 160ms ease, opacity 160ms ease;
+}
+
+.schedule-map-button:hover {
+  border-color: rgba(125, 211, 252, 0.55);
+  background: rgba(56, 189, 248, 0.2);
+}
+
+.schedule-map-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.35;
+}
+
+.schedule-map-button svg {
+  width: 1rem;
+  height: 1rem;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
 main[data-theme] nav,
 main[data-theme] > div[class*="top-0"] > div[class*="overflow-x-auto"] {
   display: none !important;
@@ -155,8 +192,18 @@ main[data-theme] > div[class*="top-0"] > div[class*="overflow-x-auto"] {
   padding-bottom: max(14px, env(safe-area-inset-bottom));
 }
 
+@media (min-width: 768px) {
+  .schedule-map-row {
+    grid-template-columns: 110px 110px minmax(0, 1fr) minmax(0, 1.4fr) auto auto !important;
+  }
+}
+
 @media (max-width: 767px) {
   .demo-globe { width: 116vw; top: 48%; }
+
+  .schedule-map-button {
+    width: 100%;
+  }
 
   body {
     padding-bottom: 5.5rem;
