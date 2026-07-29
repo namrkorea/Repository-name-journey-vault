@@ -2,13 +2,17 @@
 
 import Link from "next/link";
 import { FormEvent, useState } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
+import { Sparkles } from "lucide-react";
 import AppHeader from "@/components/AppHeader";
 import PlanDetailView from "@/components/PlanDetailView";
 import type { TravelPlanFull } from "@/types/plan";
 
+const EDIT_STORAGE_KEY = "journey-vault-edit-plan";
+
 export default function PlanViewPage() {
   const params = useParams();
+  const router = useRouter();
   const id = String(params.id ?? "");
   const [password, setPassword] = useState("");
   const [plan, setPlan] = useState<TravelPlanFull | null>(null);
@@ -45,6 +49,16 @@ export default function PlanViewPage() {
     } finally {
       setLoading(false);
     }
+  }
+
+  function openAiEditor() {
+    if (!plan) return;
+
+    sessionStorage.setItem(
+      EDIT_STORAGE_KEY,
+      JSON.stringify({ plan, savedAt: Date.now() }),
+    );
+    router.push(`/planner?edit=${encodeURIComponent(plan.id)}`);
   }
 
   return (
@@ -95,7 +109,30 @@ export default function PlanViewPage() {
             </form>
           </div>
         ) : (
-          <div className="mt-8">
+          <div className="mt-8 space-y-6">
+            <section className="flex flex-wrap items-center justify-between gap-4 rounded-3xl border border-violet-300/20 bg-gradient-to-r from-sky-400/10 to-violet-400/10 p-5">
+              <div>
+                <p className="text-xs font-bold tracking-[0.18em] text-sky-300">
+                  AI EDIT MODE
+                </p>
+                <h2 className="mt-1 text-xl font-black">
+                  저장된 일정을 AI로 다시 수정
+                </h2>
+                <p className="mt-2 text-sm leading-6 text-white/55">
+                  현재 일정 전체를 AI 편집 화면으로 불러와 수정한 뒤 같은 일정에
+                  덮어쓸 수 있습니다.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={openAiEditor}
+                className="inline-flex items-center gap-2 rounded-2xl bg-gradient-to-r from-sky-400 to-violet-400 px-5 py-3 text-sm font-black text-slate-950 shadow-lg shadow-black/20 transition hover:brightness-110"
+              >
+                <Sparkles size={18} />
+                AI로 일정 수정하기
+              </button>
+            </section>
+
             <PlanDetailView plan={plan} />
           </div>
         )}
