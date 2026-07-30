@@ -15,7 +15,7 @@ export default function AppHeader() {
             </p>
           </Link>
 
-          <div className="text-right text-[9px] font-semibold leading-[1.35] tracking-[0.1em] text-white/70 md:text-[10px]">
+          <div className="text-right text-[10px] font-semibold leading-[1.35] tracking-[0.1em] text-white/70 md:text-[11px]">
             <p>v2.0</p>
             <p>by Changho Park</p>
           </div>
