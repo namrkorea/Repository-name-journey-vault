@@ -3,7 +3,9 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { usePathname } from "next/navigation";
-import { Mail } from "lucide-react";
+import { FileText, Mail } from "lucide-react";
+import { downloadTravelPlanWord } from "@/lib/client/planWord";
+import type { ItineraryDay, TravelPlanCreateInput } from "@/types/plan";
 
 const EMAIL_FIELD_SELECTOR = "[data-plan-email-field]";
 const BRIDGE_OWNER_KEY = "__journeyVaultPlanEmailBridgeOwner";
@@ -12,12 +14,40 @@ type BridgeWindow = Window & {
   [BRIDGE_OWNER_KEY]?: string;
 };
 
+type SaveResponse = {
+  email?: { sent?: boolean; error?: string };
+};
+
 function isPlanSaveRequest(url: string, method: string): boolean {
   const pathname = new URL(url, window.location.origin).pathname;
   return (
     (pathname === "/api/plans" && method === "POST") ||
     (/^\/api\/plans\/[^/]+$/.test(pathname) && method === "PUT")
   );
+}
+
+function text(value: unknown): string {
+  return typeof value === "string" ? value : "";
+}
+
+function numberOrNull(value: unknown): number | null {
+  if (value === null || value === "" || value === undefined) return null;
+  const number = Number(value);
+  return Number.isFinite(number) ? number : null;
+}
+
+function toWordPlan(body: Record<string, unknown>): Omit<TravelPlanCreateInput, "password"> {
+  return {
+    title: text(body.title),
+    destination: text(body.destination),
+    startDate: text(body.startDate),
+    endDate: text(body.endDate),
+    travelers: Number(body.travelers) || 0,
+    budget: numberOrNull(body.budget),
+    travelStyle: text(body.travelStyle),
+    summary: text(body.summary),
+    days: Array.isArray(body.days) ? (body.days as ItineraryDay[]) : [],
+  };
 }
 
 export default function PlanEmailBridge() {
@@ -29,12 +59,18 @@ export default function PlanEmailBridge() {
   );
   const [ownsBridge, setOwnsBridge] = useState(false);
   const [email, setEmail] = useState("");
+  const [wordFileName, setWordFileName] = useState("");
   const [mountNode, setMountNode] = useState<HTMLDivElement | null>(null);
   const emailRef = useRef("");
+  const wordFileNameRef = useRef("");
 
   useEffect(() => {
     emailRef.current = email;
   }, [email]);
+
+  useEffect(() => {
+    wordFileNameRef.current = wordFileName;
+  }, [wordFileName]);
 
   useEffect(() => {
     if (!active) {
@@ -140,14 +176,16 @@ export default function PlanEmailBridge() {
       ).toUpperCase();
       const planSave = isPlanSaveRequest(url, method);
       const recipientEmail = emailRef.current.trim();
+      const requestedWordFileName = wordFileNameRef.current.trim();
       let nextInit = init;
+      let requestBody: Record<string, unknown> | null = null;
 
       if (planSave && typeof init?.body === "string") {
         try {
-          const body = JSON.parse(init.body) as Record<string, unknown>;
+          requestBody = JSON.parse(init.body) as Record<string, unknown>;
           nextInit = {
             ...init,
-            body: JSON.stringify({ ...body, recipientEmail }),
+            body: JSON.stringify({ ...requestBody, recipientEmail }),
           };
         } catch {
           nextInit = init;
@@ -156,24 +194,57 @@ export default function PlanEmailBridge() {
 
       const response = await originalFetch(input, nextInit);
 
-      if (planSave && recipientEmail && response.ok) {
-        try {
-          const data = (await response.clone().json()) as {
-            email?: { sent?: boolean; error?: string };
-          };
+      if (
+        planSave &&
+        response.ok &&
+        (recipientEmail || requestedWordFileName)
+      ) {
+        const successMessages: string[] = [];
+        const failureMessages: string[] = [];
 
-          if (data.email?.sent) {
-            window.alert(
-              `여행계획을 저장하고 ${recipientEmail} 주소로 이메일을 전송했습니다.`,
-            );
-          } else {
-            window.alert(
-              `여행계획은 저장되었지만 이메일 전송에 실패했습니다.\n${data.email?.error || "메일 설정을 확인해 주세요."}`,
-            );
+        if (recipientEmail) {
+          try {
+            const data = (await response.clone().json()) as SaveResponse;
+            if (data.email?.sent) {
+              successMessages.push(`${recipientEmail} 주소로 이메일 전송 완료`);
+            } else {
+              failureMessages.push(
+                `이메일 전송 실패: ${data.email?.error || "메일 설정을 확인해 주세요."}`,
+              );
+            }
+          } catch {
+            failureMessages.push("이메일 전송 결과를 확인하지 못했습니다.");
           }
-        } catch {
-          // 저장 응답이 JSON이 아니어도 원래 요청 처리는 계속합니다.
         }
+
+        if (requestedWordFileName) {
+          if (!requestBody) {
+            failureMessages.push("워드 문서 생성에 필요한 일정 정보를 읽지 못했습니다.");
+          } else {
+            try {
+              const savedFileName = downloadTravelPlanWord(
+                toWordPlan(requestBody),
+                requestedWordFileName,
+              );
+              successMessages.push(`${savedFileName} 워드 문서 저장 완료`);
+            } catch (caught) {
+              failureMessages.push(
+                `워드 문서 저장 실패: ${
+                  caught instanceof Error ? caught.message : "파일을 만들지 못했습니다."
+                }`,
+              );
+            }
+          }
+        }
+
+        const lines = ["여행계획이 저장되었습니다."];
+        if (successMessages.length > 0) {
+          lines.push("", ...successMessages.map((message) => `✓ ${message}`));
+        }
+        if (failureMessages.length > 0) {
+          lines.push("", ...failureMessages.map((message) => `- ${message}`));
+        }
+        window.alert(lines.join("\n"));
       }
 
       return response;
@@ -187,25 +258,49 @@ export default function PlanEmailBridge() {
   if (!active || !ownsBridge || !mountNode) return null;
 
   return createPortal(
-    <div className="mt-6 rounded-2xl border border-sky-300/20 bg-sky-400/[0.07] p-4">
-      <label className="block space-y-2">
-        <span className="inline-flex items-center gap-2 text-sm font-bold text-sky-100">
-          <Mail size={17} /> 이메일로 일정 보내기 · 선택사항
-        </span>
-        <input
-          type="email"
-          value={email}
-          onChange={(event) => setEmail(event.target.value)}
-          placeholder="예: travel@example.com"
-          autoComplete="email"
-          className="w-full rounded-2xl border border-white/10 bg-black/25 px-4 py-3 text-sm text-white outline-none transition placeholder:text-white/30 focus:border-sky-300/60 focus:ring-2 focus:ring-sky-400/15"
-        />
-      </label>
-      <p className="mt-2 text-xs leading-6 text-white/50">
-        이메일을 입력하면 저장과 함께 일정 내용 및 열람 링크를 전송합니다.
-        비밀번호는 보안을 위해 이메일에 포함하지 않습니다. 비워두면 저장만
-        수행합니다.
-      </p>
+    <div className="mt-6 space-y-3">
+      <div className="rounded-2xl border border-sky-300/20 bg-sky-400/[0.07] p-4">
+        <label className="block space-y-2">
+          <span className="inline-flex items-center gap-2 text-sm font-bold text-sky-100">
+            <Mail size={17} /> 이메일로 일정 보내기 · 선택사항
+          </span>
+          <input
+            type="email"
+            value={email}
+            onChange={(event) => setEmail(event.target.value)}
+            placeholder="예: travel@example.com"
+            autoComplete="email"
+            className="w-full rounded-2xl border border-white/10 bg-black/25 px-4 py-3 text-sm text-white outline-none transition placeholder:text-white/30 focus:border-sky-300/60 focus:ring-2 focus:ring-sky-400/15"
+          />
+        </label>
+        <p className="mt-2 text-xs leading-6 text-white/50">
+          이메일을 입력하면 저장과 함께 일정 내용 및 열람 링크를 전송합니다.
+          비밀번호는 보안을 위해 이메일에 포함하지 않습니다. 비워두면 저장만
+          수행합니다.
+        </p>
+      </div>
+
+      <div className="rounded-2xl border border-violet-300/20 bg-violet-400/[0.07] p-4">
+        <label className="block space-y-2">
+          <span className="inline-flex items-center gap-2 text-sm font-bold text-violet-100">
+            <FileText size={17} /> 워드 문서 저장 · 선택사항
+          </span>
+          <input
+            type="text"
+            value={wordFileName}
+            onChange={(event) => setWordFileName(event.target.value)}
+            placeholder="예: 후쿠오카_5일_여행계획"
+            maxLength={120}
+            autoComplete="off"
+            className="w-full rounded-2xl border border-white/10 bg-black/25 px-4 py-3 text-sm text-white outline-none transition placeholder:text-white/30 focus:border-violet-300/60 focus:ring-2 focus:ring-violet-400/15"
+          />
+        </label>
+        <p className="mt-2 text-xs leading-6 text-white/50">
+          파일이름을 입력하면 일정 저장이 성공한 뒤 같은 내용의 Word 문서를
+          내려받습니다. <span className="text-violet-200">.docx</span> 확장자는
+          자동으로 붙으며, 비워두면 워드 문서를 만들지 않습니다.
+        </p>
+      </div>
     </div>,
     mountNode,
   );
