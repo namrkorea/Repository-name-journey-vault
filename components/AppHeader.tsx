@@ -10,12 +10,12 @@ export default function AppHeader() {
             <p className="text-base font-black tracking-wide text-white md:text-lg">
               JOURNEY VAULT AI
             </p>
-            <p className="text-[8px] font-semibold tracking-[0.35em] text-sky-300 md:text-[9px]">
+            <p className="text-[10px] font-semibold tracking-[0.35em] text-sky-300 md:text-[11px]">
               PRIVATE TRAVEL DESIGNER
             </p>
           </Link>
 
-          <div className="text-right text-[9px] tracking-[0.12em] text-white/45">
+          <div className="text-right text-[9px] font-semibold leading-[1.35] tracking-[0.1em] text-white/70 md:text-[10px]">
             <p>v2.0</p>
             <p>by Changho Park</p>
           </div>
