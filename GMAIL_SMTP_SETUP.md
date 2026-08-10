@@ -1,10 +1,13 @@
-# Journey Vault AI - Gmail SMTP 설정
+# Journey Vault AI - Gmail SMTP 직접 발송 설정
 
-이 버전은 여행계획 저장 시 Firestore의 `mail` 컬렉션에 이메일 발송 요청 문서를 만들고, Firebase Trigger Email Extension이 Gmail SMTP를 통해 실제 메일을 보냅니다.
+이 버전은 Firebase Trigger Email Extension을 사용하지 않습니다.
+여행계획 저장 후 Vercel/Next.js 서버가 Gmail SMTP(`smtp.gmail.com:465`)에 직접 연결하여 이메일을 전송합니다.
 
 구조:
 
-`Journey Vault -> Vercel API -> Firestore mail -> Firebase Trigger Email -> Gmail SMTP -> 수신자`
+`Journey Vault -> Vercel Next.js API -> Gmail SMTP -> 수신자`
+
+Firebase는 계속 여행계획 저장용 Firestore로 사용하며, 이메일 때문에 Blaze 요금제로 업그레이드할 필요는 없습니다.
 
 ## 1. Gmail 계정 준비
 
@@ -13,48 +16,23 @@
 1. Google 계정 > 보안 및 로그인으로 이동합니다.
 2. 2단계 인증을 켭니다.
 3. Google 계정에서 `앱 비밀번호`를 검색합니다.
-4. 앱 이름에 `Journey Vault Firebase`를 입력합니다.
+4. 앱 이름에 `Journey Vault`를 입력합니다.
 5. 생성된 16자리 앱 비밀번호를 안전하게 보관합니다.
 
-일반 Gmail 비밀번호를 SMTP 비밀번호로 사용하지 않습니다.
+일반 Gmail 로그인 비밀번호를 SMTP 비밀번호로 사용하지 않습니다.
 
-## 2. Firebase Blaze 요금제
+## 2. 로컬 PC 설정
 
-Firebase Extension 설치를 위해 프로젝트가 Blaze 요금제여야 합니다.
-
-Firebase Console > 프로젝트 > 사용량 및 결제에서 Blaze로 업그레이드합니다.
-
-## 3. Trigger Email Extension 설치
-
-Firebase Console > Extensions에서 `Trigger Email` 또는 `firestore-send-email`을 찾아 설치합니다.
-
-설치 중 다음 값을 사용합니다.
-
-- Email documents collection: `mail`
-- SMTP host: `smtp.gmail.com`
-- SMTP port: `465`
-- SMTP security: SSL / SMTPS
-- SMTP username: 본인의 전체 Gmail 주소
-- SMTP password: Google에서 만든 16자리 앱 비밀번호
-- Default FROM address: `Journey Vault AI <본인Gmail주소>`
-- Default REPLY-TO address: 필요하면 본인 Gmail 주소
-
-Extension 화면에서 SMTP connection URI를 한 줄로 요구하면 개념적으로 `smtps://GMAIL주소@smtp.gmail.com:465`를 사용하고, 비밀번호 입력칸에는 16자리 앱 비밀번호를 넣습니다. 화면에서 Username/Host/Port를 각각 받는 경우 각각 분리하여 입력합니다.
-
-## 4. Journey Vault 로컬 설정
-
-`.env.local`에는 Firebase 서버 연결 값이 있어야 합니다.
+프로젝트의 `.env.local`에 아래 2개만 추가합니다.
 
 ```env
-FIREBASE_PROJECT_ID=...
-FIREBASE_CLIENT_EMAIL=...
-FIREBASE_PRIVATE_KEY="..."
-FIREBASE_MAIL_COLLECTION=mail
+GMAIL_SMTP_USER=본인Gmail주소@gmail.com
+GMAIL_SMTP_APP_PASSWORD=16자리앱비밀번호
 ```
 
-Gmail 주소와 앱 비밀번호는 `.env.local`, GitHub 또는 Vercel에 넣지 않습니다. Firebase Trigger Email Extension 설정에만 입력합니다.
+앱 비밀번호가 화면에서 `abcd efgh ijkl mnop`처럼 공백 포함으로 보이더라도 코드에서 공백은 자동 제거됩니다.
 
-## 5. 코드 받기
+## 3. 코드 받기
 
 ```powershell
 git switch v3-firebase
@@ -62,22 +40,47 @@ git pull origin v3-firebase
 npm.cmd run dev
 ```
 
-브라우저에서 `/planner`를 열면 열람 비밀번호 아래에 `이메일로 일정 보내기 · 선택사항`이 다시 표시됩니다.
+브라우저에서 `/planner`를 열면 `이메일로 일정 보내기 · 선택사항` 입력란이 표시됩니다.
 
-## 6. 테스트
+## 4. 로컬 테스트
 
 1. 테스트 여행계획을 만듭니다.
 2. 이메일 입력란에 본인의 다른 이메일 주소를 입력합니다.
-3. 여행계획을 저장합니다.
-4. Firebase Console > Firestore Database > Data > `mail`을 확인합니다.
-5. 새 문서의 `delivery.state`가 `SUCCESS`가 되는지 확인합니다.
-6. 수신 메일함과 스팸함을 확인합니다.
+3. 여행계획 저장을 누릅니다.
+4. `이메일 전송 완료` 메시지가 나오면 Gmail SMTP 서버가 메일을 접수한 것입니다.
+5. 수신 메일함과 스팸함을 확인합니다.
 
-정상 처리 상태는 `PENDING -> PROCESSING -> SUCCESS` 순서입니다. 실패 시 `ERROR`와 오류 메시지를 확인합니다.
+## 5. Vercel 설정
+
+Vercel > Journey Vault 프로젝트 > Settings > Environment Variables에서 아래 2개를 추가합니다.
+
+```text
+GMAIL_SMTP_USER
+GMAIL_SMTP_APP_PASSWORD
+```
+
+처음에는 Preview 환경에 넣고 `v3-firebase` Preview로 테스트합니다.
+정상 확인 후 Production 환경에도 같은 2개를 추가합니다.
+
+환경변수를 추가하거나 변경한 뒤에는 새 배포가 필요합니다.
+
+## 6. 더 이상 필요 없는 이메일 설정
+
+이 Gmail SMTP 직접 발송 방식에서는 다음 항목이 필요하지 않습니다.
+
+```text
+FIREBASE_MAIL_COLLECTION
+Firebase Trigger Email Extension
+RESEND_API_KEY
+RESEND_FROM_EMAIL
+```
+
+기존 값이 남아 있어도 새 메일 전송 코드는 사용하지 않습니다.
 
 ## 7. 보안
 
 - Gmail 일반 비밀번호를 사용하지 않습니다.
-- 16자리 앱 비밀번호를 GitHub에 올리지 않습니다.
+- Gmail 앱 비밀번호를 GitHub에 올리지 않습니다.
 - 앱 비밀번호 화면을 캡처해 공유하지 않습니다.
-- Google 계정 비밀번호를 변경하면 기존 앱 비밀번호가 폐기될 수 있으므로 새 앱 비밀번호를 만들어 Firebase Extension에 다시 입력합니다.
+- `.env.local`은 GitHub에 커밋하지 않습니다.
+- Google 계정 비밀번호 변경 등으로 앱 비밀번호가 무효화되면 새 앱 비밀번호를 만든 뒤 로컬과 Vercel 환경변수만 교체합니다.
