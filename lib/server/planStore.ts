@@ -1,3 +1,5 @@
+import type { DocumentData } from "firebase-admin/firestore";
+
 import { getFirestoreDb } from "@/lib/server/firebaseAdmin";
 import type {
   TravelPlanCreateInput,
@@ -23,7 +25,7 @@ type StoredRow = {
   updated_at: string;
 };
 
-function fromFirestore(id: string, data: FirebaseFirestore.DocumentData): StoredRow {
+function fromFirestore(id: string, data: DocumentData): StoredRow {
   const row = data as Omit<StoredRow, "id"> & { id?: string };
   return {
     ...row,
