@@ -1,8 +1,11 @@
+import { getFirestoreDb } from "@/lib/server/firebaseAdmin";
 import type {
   TravelPlanCreateInput,
   TravelPlanFull,
   TravelPlanPublic,
 } from "@/types/plan";
+
+const COLLECTION = "travel_plans";
 
 type StoredRow = {
   id: string;
@@ -20,35 +23,12 @@ type StoredRow = {
   updated_at: string;
 };
 
-function config() {
-  const url = process.env.SUPABASE_URL?.replace(/\/$/, "");
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!url || !key) {
-    throw new Error("SUPABASE_URL과 SUPABASE_SERVICE_ROLE_KEY를 설정해 주세요.");
-  }
-  return { url, key };
-}
-
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const { url, key } = config();
-  const response = await fetch(`${url}/rest/v1/${path}`, {
-    ...init,
-    headers: {
-      apikey: key,
-      Authorization: `Bearer ${key}`,
-      "Content-Type": "application/json",
-      ...init?.headers,
-    },
-    cache: "no-store",
-  });
-
-  if (!response.ok) {
-    const message = await response.text();
-    throw new Error(`여행계획 저장소 요청 실패: ${message}`);
-  }
-
-  const text = await response.text();
-  return (text ? JSON.parse(text) : null) as T;
+function fromFirestore(id: string, data: FirebaseFirestore.DocumentData): StoredRow {
+  const row = data as Omit<StoredRow, "id"> & { id?: string };
+  return {
+    ...row,
+    id: row.id ?? id,
+  };
 }
 
 function toPublicPlan(row: StoredRow): TravelPlanPublic {
@@ -83,17 +63,21 @@ export function toFullPlan(row: StoredRow): TravelPlanFull {
 }
 
 export async function listPublicPlans(): Promise<TravelPlanPublic[]> {
-  const rows = await request<StoredRow[]>(
-    "travel_plans?select=id,title,destination,start_date,end_date,travelers,travel_style,created_at&order=created_at.desc&limit=100",
-  );
-  return rows.map(toPublicPlan);
+  const snapshot = await getFirestoreDb()
+    .collection(COLLECTION)
+    .orderBy("created_at", "desc")
+    .limit(100)
+    .get();
+
+  return snapshot.docs.map((doc) => toPublicPlan(fromFirestore(doc.id, doc.data())));
 }
 
 export async function getStoredPlan(id: string): Promise<StoredRow | null> {
-  const rows = await request<StoredRow[]>(
-    `travel_plans?id=eq.${encodeURIComponent(id)}&select=*&limit=1`,
-  );
-  return rows[0] ?? null;
+  const doc = await getFirestoreDb().collection(COLLECTION).doc(id).get();
+  if (!doc.exists) {
+    return null;
+  }
+  return fromFirestore(doc.id, doc.data() ?? {});
 }
 
 export async function createTravelPlan(
@@ -103,26 +87,23 @@ export async function createTravelPlan(
   const id = crypto.randomUUID();
   const now = new Date().toISOString();
 
-  const [row] = await request<StoredRow[]>("travel_plans", {
-    method: "POST",
-    headers: { Prefer: "return=representation" },
-    body: JSON.stringify({
-      id,
-      title: input.title,
-      destination: input.destination,
-      start_date: input.startDate,
-      end_date: input.endDate,
-      travelers: input.travelers,
-      budget: input.budget,
-      travel_style: input.travelStyle,
-      summary: input.summary,
-      itinerary: input.days,
-      password_hash: passwordHash,
-      created_at: now,
-      updated_at: now,
-    }),
-  });
+  const row: StoredRow = {
+    id,
+    title: input.title,
+    destination: input.destination,
+    start_date: input.startDate,
+    end_date: input.endDate,
+    travelers: input.travelers,
+    budget: input.budget ?? null,
+    travel_style: input.travelStyle || null,
+    summary: input.summary || null,
+    itinerary: input.days ?? [],
+    password_hash: passwordHash,
+    created_at: now,
+    updated_at: now,
+  };
 
+  await getFirestoreDb().collection(COLLECTION).doc(id).set(row);
   return toPublicPlan(row);
 }
 
@@ -130,43 +111,40 @@ export async function updateTravelPlan(
   id: string,
   input: Omit<TravelPlanCreateInput, "password">,
 ): Promise<TravelPlanPublic> {
-  const [row] = await request<StoredRow[]>(
-    `travel_plans?id=eq.${encodeURIComponent(id)}`,
-    {
-      method: "PATCH",
-      headers: { Prefer: "return=representation" },
-      body: JSON.stringify({
-        title: input.title,
-        destination: input.destination,
-        start_date: input.startDate,
-        end_date: input.endDate,
-        travelers: input.travelers,
-        budget: input.budget,
-        travel_style: input.travelStyle,
-        summary: input.summary,
-        itinerary: input.days,
-        updated_at: new Date().toISOString(),
-      }),
-    },
-  );
+  const docRef = getFirestoreDb().collection(COLLECTION).doc(id);
+  const current = await docRef.get();
 
-  if (!row) {
+  if (!current.exists) {
     throw new Error("수정할 여행계획을 찾을 수 없습니다.");
   }
 
-  return toPublicPlan(row);
+  await docRef.update({
+    title: input.title,
+    destination: input.destination,
+    start_date: input.startDate,
+    end_date: input.endDate,
+    travelers: input.travelers,
+    budget: input.budget ?? null,
+    travel_style: input.travelStyle || null,
+    summary: input.summary || null,
+    itinerary: input.days ?? [],
+    updated_at: new Date().toISOString(),
+  });
+
+  const updated = await docRef.get();
+  return toPublicPlan(fromFirestore(updated.id, updated.data() ?? {}));
 }
 
 export async function listAdminPlans(): Promise<TravelPlanFull[]> {
-  const rows = await request<StoredRow[]>(
-    "travel_plans?select=*&order=created_at.desc&limit=200",
-  );
-  return rows.map(toFullPlan);
+  const snapshot = await getFirestoreDb()
+    .collection(COLLECTION)
+    .orderBy("created_at", "desc")
+    .limit(200)
+    .get();
+
+  return snapshot.docs.map((doc) => toFullPlan(fromFirestore(doc.id, doc.data())));
 }
 
 export async function deleteTravelPlan(id: string): Promise<void> {
-  await request<null>(`travel_plans?id=eq.${encodeURIComponent(id)}`, {
-    method: "DELETE",
-    headers: { Prefer: "return=minimal" },
-  });
+  await getFirestoreDb().collection(COLLECTION).doc(id).delete();
 }
