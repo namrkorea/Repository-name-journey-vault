@@ -1,3 +1,4 @@
+import { getFirestoreDb } from "@/lib/server/firebaseAdmin";
 import type { TravelPlanCreateInput } from "@/types/plan";
 
 type EmailPlan = Omit<TravelPlanCreateInput, "password">;
@@ -126,44 +127,22 @@ export async function sendTravelPlanEmail({
   planUrl,
   plan,
 }: SendPlanEmailInput): Promise<string> {
-  const apiKey = process.env.RESEND_API_KEY;
-  const from = process.env.RESEND_FROM_EMAIL;
+  const collectionName = process.env.FIREBASE_MAIL_COLLECTION?.trim() || "mail";
+  const db = getFirestoreDb();
 
-  if (!apiKey || !from) {
-    throw new Error(
-      "메일 전송 환경변수 RESEND_API_KEY와 RESEND_FROM_EMAIL이 설정되지 않았습니다.",
-    );
-  }
-
-  const response = await fetch("https://api.resend.com/emails", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      "Content-Type": "application/json",
-      "Idempotency-Key": `journey-vault-${planId}-${Date.now()}`,
-    },
-    body: JSON.stringify({
-      from,
-      to: [to],
+  const doc = await db.collection(collectionName).add({
+    to: [to],
+    message: {
       subject: `[Journey Vault] ${plan.title}`,
       html: buildHtml(plan, planUrl),
       text: buildText(plan, planUrl),
-    }),
+    },
+    metadata: {
+      source: "journey-vault",
+      planId,
+      requestedAt: new Date().toISOString(),
+    },
   });
 
-  const text = await response.text();
-  let data: { id?: string; message?: string; name?: string } = {};
-  try {
-    data = text ? (JSON.parse(text) as typeof data) : {};
-  } catch {
-    data = {};
-  }
-
-  if (!response.ok || !data.id) {
-    throw new Error(
-      data.message || data.name || "메일 서비스가 전송 요청을 처리하지 못했습니다.",
-    );
-  }
-
-  return data.id;
+  return doc.id;
 }
