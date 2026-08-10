@@ -206,14 +206,14 @@ export default function PlanEmailBridge() {
           try {
             const data = (await response.clone().json()) as SaveResponse;
             if (data.email?.sent) {
-              successMessages.push(`${recipientEmail} 주소로 이메일 전송 완료`);
+              successMessages.push(`${recipientEmail} 주소로 메일 발송 요청 완료`);
             } else {
               failureMessages.push(
-                `이메일 전송 실패: ${data.email?.error || "메일 설정을 확인해 주세요."}`,
+                `이메일 발송 요청 실패: ${data.email?.error || "Firebase 메일 설정을 확인해 주세요."}`,
               );
             }
           } catch {
-            failureMessages.push("이메일 전송 결과를 확인하지 못했습니다.");
+            failureMessages.push("이메일 발송 요청 결과를 확인하지 못했습니다.");
           }
         }
 
@@ -274,9 +274,9 @@ export default function PlanEmailBridge() {
           />
         </label>
         <p className="mt-2 text-xs leading-6 text-white/50">
-          이메일을 입력하면 저장과 함께 일정 내용 및 열람 링크를 전송합니다.
-          비밀번호는 보안을 위해 이메일에 포함하지 않습니다. 비워두면 저장만
-          수행합니다.
+          이메일을 입력하면 저장과 함께 Firebase를 통해 Gmail SMTP 발송을 요청합니다.
+          일정 내용과 열람 링크를 보내며 비밀번호는 이메일에 포함하지 않습니다.
+          비워두면 저장만 수행합니다.
         </p>
       </div>
 
