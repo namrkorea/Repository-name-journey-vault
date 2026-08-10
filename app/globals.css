@@ -114,6 +114,11 @@ main[data-theme] > div[class*="top-0"] > div[class*="overflow-x-auto"] {
   display: none !important;
 }
 
+/* 이메일 전송 모듈은 유지하되 현재 화면에서는 입력 영역만 숨깁니다. */
+[data-plan-email-field] > div > div:first-child {
+  display: none !important;
+}
+
 .glass {
   border: 1px solid var(--line);
   background: var(--surface);
